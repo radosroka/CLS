@@ -105,4 +105,8 @@ else {
 $abcd = new class_methods(new arg_tpl("abc", "int"), "instance", false, "");
 
 echo $abcd->header->name;
+
+$parsed = explode(" ", $input);
+var_dump($parsed);
+
 ?>
