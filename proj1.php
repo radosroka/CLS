@@ -1,11 +1,11 @@
 <?php
 
-class cpp_class {
-	public $name = "";
-	public $kind = "concrete";	# concrete/abstract
-	public $privacy = "";		# privat/public/pretected
-	public $atributes;
-	public $methods;
+class CPPClass {
+	private $name = "";
+	private $kind = "concrete";	# concrete/abstract
+	private $privacy = "";		# privat/public/pretected
+	private $atributes;
+	private $methods;
 
 	function __construct($name, $kind, $privacy){
 		$this->name = $name;
@@ -25,10 +25,10 @@ class cpp_class {
 	}
 }
 
-class class_attr {
-	public $header;				# arg_tpl
-	public $scope = "";			# static/instance
-	public $from_inh;			# class
+class ClassAttr {
+	private $header;				# arg_tpl
+	private $scope = "";			# static/instance
+	private $from_inh;				# class
 
 	function __construct($header, $scope){
 		$this->header = $header;
@@ -41,11 +41,11 @@ class class_attr {
 	}
 }
 
-class class_methods {
-	public $header;				# arg_tpl
-	public $scope = "";			# static/instance
-	public $virtual;			# pure yes/no
-	public $arguments;			# tupples name and type
+class ClassMethods {
+	private $header;				# arg_tpl
+	private $scope = "";			# static/instance
+	private $virtual;				# pure yes/no
+	private $arguments;				# tupples name and type
 
 	function __construct($header, $scope, $virtual, $purity){
 		$this->header = $header;
@@ -64,9 +64,9 @@ class class_methods {
 	}
 }
 
-class arg_tpl {
-	public $name = "";
-	public $type = "";
+class ArgTpl {
+	private $name = "";
+	private $type = "";
 
 	function __construct($name, $type){
 		$this->name = $name;
@@ -74,42 +74,83 @@ class arg_tpl {
 	}
 }
 
-mb_internal_encoding("UTF-8"); 
-mb_regex_encoding('UTF-8');
+class CLSParser {
+	private $parsed_classes;		#array of parsed classes
+	private $class;					#actual class
+	private $input_string;
+	private $tokens;
 
-$sets = array( "help", "input:", "output:", "pretty-xml:", "details:", "search::" );
-$options = getopt("", $sets);
+	private $sets;
+	private $options;
+	
+	function __construct(){
+		$parsed_classes = array();
+		mb_internal_encoding("UTF-8"); 
+		mb_regex_encoding('UTF-8');
 
-var_dump($options);
+		$this->sets = array( "help", "input:", "output:", "pretty-xml:", "details:", "search::" );
+		$this->options = getopt("", $this->sets);
+		var_dump($this->options);
+	}
 
-if (array_key_exists("help", $options)){
-	if (count($options) != 1)
-		exit(1);
-	echo "--help              prints help\n";
-	echo "--input-file        input text file with classes, if it's not specified stdin will be used instead\n";
-	echo "--output-file       output text file in xml format, if it's not specified stdout will be used instead\n";
-	echo "--pretty-xml        set witdh of indentation\n";
-	echo "--details           instead of printing tree of inheritance script prints details about class, if it's not specified prints all classes\n";
-	echo "--search            result of searching by XPATH\n";
+	function read_input(){
+		$this->input = "";
+		if (array_key_exists("input", $this->options)){
+			$myfile = fopen($this->options["input"], "r") or exit(2);
+			$this->input = fread($myfile,filesize($this->options["input"]));
+			fclose($myfile);
+		}
+		else {
+			while ($line = fgets(STDIN))
+			$this->input .= $line; 
+		}
+	}
+
+	function print_input(){
+		var_dump($this->input);
+	}
+
+	function tokenize(){
+		$this->tokens = preg_split('/([\s:,;{}])/iu', $this->input, -1, PREG_SPLIT_NO_EMPTY | PREG_SPLIT_DELIM_CAPTURE);
+		$this->tokens = array_filter(array_map('trim', $this->tokens));
+	}
+
+	function print_tokens(){
+		var_dump($this->tokens);
+	}
+
+	function parse(){
+		if (array_key_exists("help", $this->options)){
+			if (count($options) != 1)
+				exit(1);
+			echo "--help              prints help\n";
+			echo "--input-file        input text file with classes, if it's not specified stdin will be used instead\n";
+			echo "--output-file       output text file in xml format, if it's not specified stdout will be used instead\n";
+			echo "--pretty-xml        set witdh of indentation\n";
+			echo "--details           instead of printing tree of inheritance script prints details about class, if it's not specified prints all classes\n";
+			echo "--search            result of searching by XPATH\n";
+		}
+		
+		$this->tokenize();
+		$this->print_tokens();
+	}
 }
 
-$input = "";
 
-if (array_key_exists("input", $options)){
-	$myfile = fopen($options["input"], "r") or exit(2);
-	$input = fread($myfile,filesize($options["input"]));
-	fclose($myfile);
-}
-else {
-	while ($line = fgets(STDIN))
-		$input .= $line; 
-}
+#$abcd = new class_methods(new arg_tpl("abc", "int"), "instance", false, "");
 
-$abcd = new class_methods(new arg_tpl("abc", "int"), "instance", false, "");
+#echo $abcd->header->name;
+#$regexp = "class\s+[^\W\d][\w]*[\s]*([:][\s]*[^\W\d][\w]*([\s]*[,][\s]*[^\W\d][\w]*)*)?[\s]*({(\s*|.*)});";
+#echo $input;
+#$parsed = preg_split('/([\s:,;{}])/iu', $input, -1, PREG_SPLIT_NO_EMPTY | PREG_SPLIT_DELIM_CAPTURE);
 
-echo $abcd->header->name;
-$regexp = "class[\s+[^\W\d][\w]*[\s]*[:]?([\s]*[^\W\d][\w]*([\s]*[,][\s]*[^\W\d][\w]*)*)?[\s]*({(\s*|.*)})"
-preg_match('/class [_\d]/u', $input, $parsed);
-var_dump($parsed);
+#$parsed = array_filter(array_map('trim', $parsed));
+
+#var_dump($parsed);
+
+$parser = new CLSParser();
+$parser->read_input();
+$parser->print_input();
+$parser->parse();
 
 ?>
