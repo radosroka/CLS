@@ -74,6 +74,9 @@ class arg_tpl {
 	}
 }
 
+mb_internal_encoding("UTF-8"); 
+mb_regex_encoding('UTF-8');
+
 $sets = array( "help", "input:", "output:", "pretty-xml:", "details:", "search::" );
 $options = getopt("", $sets);
 
@@ -105,8 +108,8 @@ else {
 $abcd = new class_methods(new arg_tpl("abc", "int"), "instance", false, "");
 
 echo $abcd->header->name;
-
-$parsed = explode(" ", $input);
+$regexp = "class[\s+[^\W\d][\w]*[\s]*[:]?([\s]*[^\W\d][\w]*([\s]*[,][\s]*[^\W\d][\w]*)*)?[\s]*({(\s*|.*)})"
+preg_match('/class [_\d]/u', $input, $parsed);
 var_dump($parsed);
 
 ?>
