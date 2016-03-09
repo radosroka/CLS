@@ -1,17 +1,13 @@
 <?php
 
 class CPPClass {
-	private $name = "";
-	private $kind = "concrete";	# concrete/abstract
-	private $privacy = "";		# privat/public/pretected
+	public $name = "";
+	public $kind = "concrete";	# concrete/abstract
+	public $privacy = "";		# privat/public/pretected
 	private $atributes;
 	private $methods;
 
-	function __construct($name, $kind, $privacy){
-		$this->name = $name;
-		$this->kind = $kind;
-		$this->privacy = $privacy;
-
+	function __construct(){
 		$this->atributes = array();
 		$this->methods = array();
 	}
@@ -96,7 +92,8 @@ class CLSParser {
 	function read_input(){
 		$this->input = "";
 		if (array_key_exists("input", $this->options)){
-			$myfile = fopen($this->options["input"], "r") or exit(2);
+			if (!($myfile = fopen($this->options["input"], "r")))
+				return 2;
 			$this->input = fread($myfile,filesize($this->options["input"]));
 			fclose($myfile);
 		}
@@ -111,28 +108,63 @@ class CLSParser {
 	}
 
 	function tokenize(){
-		$this->tokens = preg_split('/([\s:,;{}])/iu', $this->input, -1, PREG_SPLIT_NO_EMPTY | PREG_SPLIT_DELIM_CAPTURE);
+		$this->tokens = preg_split('/([\s:,;{}&\*])/iu', $this->input, -1, PREG_SPLIT_NO_EMPTY | PREG_SPLIT_DELIM_CAPTURE);
 		$this->tokens = array_filter(array_map('trim', $this->tokens));
+		$this->tokens = array_values($this->tokens);
 	}
 
 	function print_tokens(){
 		var_dump($this->tokens);
 	}
 
-	function parse(){
+	function check_help(){
 		if (array_key_exists("help", $this->options)){
-			if (count($options) != 1)
-				exit(1);
+			if (count($this->options) != 1)
+				return 1;
 			echo "--help              prints help\n";
 			echo "--input-file        input text file with classes, if it's not specified stdin will be used instead\n";
 			echo "--output-file       output text file in xml format, if it's not specified stdout will be used instead\n";
 			echo "--pretty-xml        set witdh of indentation\n";
 			echo "--details           instead of printing tree of inheritance script prints details about class, if it's not specified prints all classes\n";
 			echo "--search            result of searching by XPATH\n";
+			return -1;
 		}
+		else return 0;
+	}
+
+	function rec_parser($param, $index){
 		
+		if (!array_key_exists($index, $this->tokens))return;
+
+		switch ($param){
+			
+			case "finding":
+				if ($this->tokens[$index] == "class")
+					$this->rec_parser("start", $index + 1);
+				else 
+					$this->rec_parser("finding", $index + 1);
+				break;
+			
+			case "start":
+				$this->class = new CPPClass();
+				$this->rec_parser("name", $index + 1);
+				break;
+
+			case "name":
+				$this->class->name = $this->tokens[$index];
+				$this->rec_parser("colon", $index + 1);
+				break;
+
+			case "colon":
+				if (!($this->tokens[$index] == ':'))return;
+		}
+	}
+
+	function parse(){
 		$this->tokenize();
 		$this->print_tokens();
+	
+		$this->rec_parser("finding", 0);
 	}
 }
 
@@ -149,7 +181,16 @@ class CLSParser {
 #var_dump($parsed);
 
 $parser = new CLSParser();
-$parser->read_input();
+$ret = 0;
+
+if ($ret = $parser->check_help()){
+	if ($ret == -1)
+		exit(0);
+	else 
+		exit($ret);
+}
+
+if ($ret = $parser->read_input())exit($ret);
 $parser->print_input();
 $parser->parse();
 
