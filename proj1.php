@@ -1,15 +1,23 @@
+#!/usr/bin/php
 <?php
 
 class CPPClass {
 	public $name = "";
 	public $kind = "concrete";	# concrete/abstract
 	public $privacy = "";		# privat/public/pretected
+
+	private $inh;
 	private $atributes;
 	private $methods;
 
 	function __construct(){
 		$this->atributes = array();
 		$this->methods = array();
+		$this->inh = array();
+	}
+
+	function add_inheritance($attr){
+		array_push($this->inh, $attr);
 	}
 
 	function add_attr($attr){
@@ -18,6 +26,10 @@ class CPPClass {
 
 	function add_method($method){
 		array_push($this->methods, $method);
+	}
+
+	function print_dump(){
+		var_dump($this);
 	}
 }
 
@@ -71,22 +83,36 @@ class ArgTpl {
 }
 
 class CLSParser {
-	private $parsed_classes;		#array of parsed classes
-	private $class;					#actual class
+	public $parsed_classes;		#array of parsed classes
+	public $class;					#actual class
 	private $input_string;
 	private $tokens;
+	
+	private $index;
+	private $used;
+	private $actual_name;
 
 	private $sets;
 	private $options;
 	
 	function __construct(){
-		$parsed_classes = array();
+		$this->parsed_classes = array();
 		mb_internal_encoding("UTF-8"); 
 		mb_regex_encoding('UTF-8');
 
 		$this->sets = array( "help", "input:", "output:", "pretty-xml:", "details:", "search::" );
 		$this->options = getopt("", $this->sets);
+
+		$this->index = 0;
+		$this->used = 0;
+		$this->actual_name = "";
+		$this->actual_type = "";
+
 		var_dump($this->options);
+	}
+
+	function add_class($attr){
+		array_push($this->parsed_classes, $attr);
 	}
 
 	function read_input(){
@@ -132,39 +158,204 @@ class CLSParser {
 		else return 0;
 	}
 
-	function rec_parser($param, $index){
+	function rec_parser($param){
 		
-		if (!array_key_exists($index, $this->tokens))return;
+		if ($this->used){
+			$this->index++;
+			$this->used = 0;
+		}
+
+		if (!array_key_exists($this->index, $this->tokens))return 1;
+		$ret = 0;
+		echo "$param\n";
 
 		switch ($param){
 			
 			case "finding":
-				if ($this->tokens[$index] == "class")
-					$this->rec_parser("start", $index + 1);
-				else 
-					$this->rec_parser("finding", $index + 1);
+				$this->used = 1;
+				if ($this->tokens[$this->index] == "class")
+					if ($ret = $this->rec_parser("start"))return $ret;
+				if ($ret = $this->rec_parser("finding"))return $ret;
 				break;
 			
 			case "start":
 				$this->class = new CPPClass();
-				$this->rec_parser("name", $index + 1);
+				$this->add_class($this->class);
+				if ($ret = $this->rec_parser("class_name"))return $ret;
+				if ($ret = $this->rec_parser("inh"))return $ret;
+				if ($ret = $this->rec_parser("body"))return $ret;
+				if ($ret = $this->rec_parser("semicolon"))return $ret;
 				break;
 
-			case "name":
-				$this->class->name = $this->tokens[$index];
-				$this->rec_parser("colon", $index + 1);
+			case "inh":
+				if ($this->tokens[$this->index] == ":"){
+					if ($ret = $this->rec_parser("colon"))return $ret;
+					if ($ret = $this->rec_parser("inh_name"))return $ret;
+					if ($ret = $this->rec_parser("inh_next"))return $ret;
+				}
+				break;
+
+			case "inh_next":
+				if ($this->tokens[$this->index] == ","){
+					if ($ret = $this->rec_parser("comma"))return $ret;
+					if ($ret = $this->rec_parser("inh_name"))return $ret;
+					if ($ret = $this->rec_parser("inh_next"))return $ret;
+				}
+				break;
+
+			case "body":
+				if ($this->tokens[$this->index] == "{"){
+					if ($ret = $this->rec_parser("curly_left"))return $ret;
+					$this->rec_parser("privacy");
+					if (($ret = $this->rec_parser("virtual"))){
+						if ($ret = $this->rec_parser("v_method"))return $ret;
+					}
+					else if ($ret = $this->rec_parser("statement"))return $ret;
+					if ($ret = $this->rec_parser("curly_right"))return $ret;
+				}
+				break;
+
+			case "statement":
+				if ($ret = $this->rec_parser("type"))return $ret;
+				if ($ret = $this->rec_parser("actual_name"))return $ret;
+				if ($ret = $this->rec_parser("stmt_tail"))return $ret;
+				if ($ret = $this->rec_parser("semicolon"))return $ret;
+				break;
+
+			case "stmt_tail":
+				if ($this->tokens[$this->index] == ",")
+					if ($ret = $this->rec_parser("var_next"))return $ret;
+				else {
+					if ($ret = $this->rec_parser("bracket_left"))return $ret;
+					if ($ret = $this->rec_parser("args"))return $ret;
+					if ($ret = $this->rec_parser("args_n"))return $ret;
+					if ($ret = $this->rec_parser("bracket_right"))return $ret;
+				}
+
+				break;
+
+			case "var_next":
+				if ($this->tokens[$this->index] == ","){
+					if ($ret = $this->rec_parser("comma"))return $ret;
+					if ($ret = $this->rec_parser("actual_name"))return $ret;
+					if ($ret = $this->rec_parser("var_next"))return $ret;
+				}
+				break;
+
+			case "v_method":
+				if ($ret = $this->rec_parser("type"))return $ret;
+				if ($ret = $this->rec_parser("actual_name"))return $ret;
+				if ($ret = $this->rec_parser("bracket_left"))return $ret;		#*
+				if ($ret = $this->rec_parser("args"))return $ret;				#*
+				if ($ret = $this->rec_parser("args_n"))return $ret;				#*
+				if ($ret = $this->rec_parser("bracket_right"))return $ret;		#*
+				if ($ret = $this->rec_parser("v_tail"))return $ret;				#*
+				break;
+
+			
+
+			case "type":
+				$this->used = 1;
+				$this->actual_type .= $this->tokens[$this->index];
+				if ($ret = $this->rec_parser("type_next"))return $ret;
+				break;
+
+			case "type_next":
+				$this->used = 1;
+				if ($this->tokens[$this->index] == "*"){
+					$this->actual_type .= $this->tokens[$this->index];
+					if ($ret = $this->rec_parser("*type_next"))return $ret;
+					return 0;
+				}
+				else if ($this->tokens[$this->index] == "&"){
+					$this->actual_type .= $this->tokens[$this->index];
+					if ($ret = $this->rec_parser("&type_next"))return $ret;
+					return 0;
+				}
+				break;
+
+			case "*type_next":
+				$this->used = 1;
+				if ($this->tokens[$this->index] == "*"){
+					$this->actual_type .= $this->tokens[$this->index];
+					if ($ret = $this->rec_parser("*type_next"))return $ret;
+					return 0;
+				}
+
+			case "&type_next":
+				$this->used = 1;
+				if ($this->tokens[$this->index] == "&"){
+					$this->actual_type .= $this->tokens[$this->index];
+					if ($ret = $this->rec_parser("&type_next"))return $ret;
+					return 0;
+				}
+
+			case "privacy":
+				if ($this->tokens[$this->index] == "public" || $this->tokens[$this->index] == "private" || $this->tokens[$this->index] == "protected"){
+					$this->used = 1;
+					return 0;
+				}
+				else return 1;
+				break;
+
+			case "actual_name":
+				$this->used = 1;
+				$this->actual_name = $this->tokens[$this->index];
+				break;
+
+			case "class_name":
+				$this->used = 1;
+				$this->class->name = $this->tokens[$this->index];
+				break;
+
+			case "inh_name":
+				$this->used = 1;
+				$this->class->add_inheritance($this->tokens[$this->index]);
+				break;
+
+			case "curly_left":
+				$this->used = 1;
+				if ($this->tokens[$this->index] == '{')return 0;
+				else return 1;
+				break;
+
+			case "curly_right":
+				$this->used = 1;
+				if ($this->tokens[$this->index] == '}')return 0;
+				else return 1;
+				break;
+
+			case "comma":
+				$this->used = 1;
+				if ($this->tokens[$this->index] == ',')return 0;
+				else return 1;
 				break;
 
 			case "colon":
-				if (!($this->tokens[$index] == ':'))return;
+				$this->used = 1;
+				if ($this->tokens[$this->index] == ':')return 0;
+				else return 1;
+				break;
+
+			case "semicolon":
+				$this->used = 1;
+				if ($this->tokens[$this->index] == ';')return 0;
+				else return 1;
+				break;
+
+			case "virtual":
+				$this->used = 1;
+				if ($this->tokens[$this->index] == 'virtual')return 1;
+				else return 0;
+				break;
 		}
 	}
 
 	function parse(){
 		$this->tokenize();
 		$this->print_tokens();
-	
-		$this->rec_parser("finding", 0);
+		$ret = 0;
+		if ($ret = $this->rec_parser("finding"))return $ret;
 	}
 }
 
@@ -192,6 +383,8 @@ if ($ret = $parser->check_help()){
 
 if ($ret = $parser->read_input())exit($ret);
 $parser->print_input();
-$parser->parse();
+if ($ret = $parser->parse())exit($ret);
+$parser->class->print_dump();
+var_dump($parser->parsed_classes);
 
 ?>
