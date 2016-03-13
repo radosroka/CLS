@@ -4,11 +4,10 @@
 class CPPClass {
 	public $name = "";
 	public $kind = "concrete";	# concrete/abstract
-	public $privacy = "";		# privat/public/pretected
 
-	private $inh;
-	private $atributes;
-	private $methods;
+	public $inh;
+	public $atributes;
+	public $methods;
 
 	function __construct(){
 		$this->atributes = array();
@@ -34,36 +33,20 @@ class CPPClass {
 }
 
 class ClassAttr {
-	private $header;				# arg_tpl
-	private $scope = "";			# static/instance
-	private $from_inh;				# class
-
-	function __construct($header, $scope){
-		$this->header = $header;
-		$this->scope = $scope;
-		$this->from_inh = array();
-	}
+	public $header;					# arg_tpl
+	public $from_inh = "";			# name of class
 
 	function add_inh($inh){
 		array_push($this->from_inh, $inh);
 	}
 }
 
-class ClassMethods {
-	private $header;				# arg_tpl
-	private $scope = "";			# static/instance
-	private $virtual;				# pure yes/no
-	private $arguments;				# tupples name and type
+class ClassMethod {
+	public $header;				# arg_tpl
+	public $virtual = "";				# pure yes/no
+	public $arguments;				# tupples name and type
 
-	function __construct($header, $scope, $virtual, $purity){
-		$this->header = $header;
-		$this->scope = $scope;
-
-		if ($virtual)
-			$this->virtual = $purity;
-		else
-			$this->virtual = "";
-
+	function __construct(){
 		$this->arguments = array();
 	}
 
@@ -73,13 +56,10 @@ class ClassMethods {
 }
 
 class ArgTpl {
-	private $name = "";
-	private $type = "";
-
-	function __construct($name, $type){
-		$this->name = $name;
-		$this->type = $type;
-	}
+	public $name = "";
+	public $type = "";
+	public $scope = "instance";		# static/instance
+	public $privacy = "private";	# private/public/pretected
 }
 
 function trim_value(&$value){ 
@@ -88,16 +68,22 @@ function trim_value(&$value){
 
 class CLSParser {
 	public $parsed_classes;		#array of parsed classes
-	public $class;					#actual class
-	private $input_string;
-	private $tokens;
+	public $input_string;
+	public $tokens;
 	
-	private $index;
-	private $used;
-	private $actual_name;
+	public $index;
+	public $used;
+	public $actual_name;
+	public $actual_type;
+	public $actual_privacy;
 
-	private $sets;
-	private $options;
+	public $class;					#actual class
+	public $tuple;
+	public $attr;
+	public $method;
+
+	public $sets;
+	public $options;
 	
 	function __construct(){
 		$this->parsed_classes = array();
@@ -111,6 +97,7 @@ class CLSParser {
 		$this->used = 0;
 		$this->actual_name = "";
 		$this->actual_type = "";
+		$this->actual_privacy = "private";
 
 		var_dump($this->options);
 	}
@@ -187,6 +174,7 @@ class CLSParser {
 			case "start":
 				$this->class = new CPPClass();
 				$this->add_class($this->class);
+				$this->actual_privacy = "private";
 				if ($ret = $this->rec_parser("class_name"))return $ret;
 				if ($ret = $this->rec_parser("inh"))return $ret;
 				if ($ret = $this->rec_parser("body"))return $ret;
@@ -196,7 +184,7 @@ class CLSParser {
 			case "inh":
 				if ($this->tokens[$this->index] == ":"){
 					if ($ret = $this->rec_parser(":"))return $ret;
-					$this->rec_parser("privacy");
+					if (($this->rec_parser("privacy")))$this->actual_privacy = "";
 					if ($ret = $this->rec_parser("inh_name"))return $ret;
 					if ($ret = $this->rec_parser("inh_next"))return $ret;
 				}
@@ -205,7 +193,7 @@ class CLSParser {
 			case "inh_next":
 				if ($this->tokens[$this->index] == ","){
 					if ($ret = $this->rec_parser(","))return $ret;
-					$this->rec_parser("privacy");
+					if (($this->rec_parser("privacy")))$this->actual_privacy = "";
 					if ($ret = $this->rec_parser("inh_name"))return $ret;
 					if ($ret = $this->rec_parser("inh_next"))return $ret;
 				}
@@ -221,32 +209,65 @@ class CLSParser {
 
 			case "body_line":
 				if ($this->tokens[$this->index] == "}")return 0;
+				$this->tuple = new ArgTpl();
 				if (!($this->rec_parser("privacy")))if ($ret = $this->rec_parser(":"))return $ret;
+				$this->tuple->privacy = $this->actual_privacy;
 				if (!($ret = $this->rec_parser("static"))){
+					$this->tuple->scope = "static";
 					if ($ret = $this->rec_parser("statement"))return $ret;
 				}
 				else if (!($ret = $this->rec_parser("virtual"))){
+					$this->method = new ClassMethod();
+					$this->method->header = $this->tuple;
+					$this->class->add_method($this->method);
+					$this->method->virtual = "no";
 					if ($ret = $this->rec_parser("v_method"))return $ret;
 				}
-				else
+				else if (!($ret = $this->rec_parser("using"))){
+					$this->attr = new ClassAttr();
+					$this->attr->header = $this->tuple;
+					$this->class->add_attr($this->attr);
+					if ($ret = $this->rec_parser("actual_name"))return $ret;
+					$this->attr->from_inh = $this->actual_name;
+					if ($ret = $this->rec_parser(":"))return $ret;
+					if ($ret = $this->rec_parser(":"))return $ret;
+					if ($ret = $this->rec_parser("actual_name"))return $ret;
+					$this->tuple->name = $this->actual_name;
+					if ($ret = $this->rec_parser(";"))return $ret;
+				}
+				else {
 					if ($ret = $this->rec_parser("statement"))return $ret;
+				}
 				if ($ret = $this->rec_parser("body_line"))return $ret;
 				break;
 
 			case "statement":
 				if ($ret = $this->rec_parser("type"))return $ret;
+				$this->tuple->type = $this->actual_type;
 				if ($ret = $this->rec_parser("actual_name"))return $ret;
+				$this->tuple->name = $this->actual_name;
 				if ($ret = $this->rec_parser("stmt_tail"))return $ret;
 				if ($ret = $this->rec_parser(";"))return $ret;
 				break;
 
 			case "stmt_tail":
-				if ($this->tokens[$this->index] == ",")
+				if ($this->tokens[$this->index] == ";"){
+					$this->attr = new ClassAttr();
+					$this->attr->header = $this->tuple;
+					$this->class->add_attr($this->attr);
+				}
+				else if ($this->tokens[$this->index] == ","){
+					$this->attr = new ClassAttr();
+					$this->attr->header = $this->tuple;
+					$this->class->add_attr($this->attr);
 					if ($ret = $this->rec_parser("var_next"))return $ret;
-				else {
+				}
+				else if ($this->tokens[$this->index] == "("){
+					$this->method = new ClassMethod();
+					$this->method->header = $this->tuple;
+					$this->class->add_method($this->method);
 					if ($ret = $this->rec_parser("("))return $ret;
 					if ($ret = $this->rec_parser("args"))return $ret;
-					if ($ret = $this->rec_parser("args_n"))return $ret;
 					if ($ret = $this->rec_parser(")"))return $ret;
 				}
 				break;
@@ -254,14 +275,20 @@ class CLSParser {
 			case "var_next":
 				if ($this->tokens[$this->index] == ","){
 					if ($ret = $this->rec_parser(","))return $ret;
+					$this->attr = new ClassAttr();
+					$this->attr->header = clone $this->tuple;
+					$this->class->add_attr($this->attr);
 					if ($ret = $this->rec_parser("actual_name"))return $ret;
+					$this->attr->header->name = $this->actual_name;
 					if ($ret = $this->rec_parser("var_next"))return $ret;
 				}
 				break;
 
 			case "v_method":
 				if ($ret = $this->rec_parser("type"))return $ret;
+				$this->tuple->type = $this->actual_type;
 				if ($ret = $this->rec_parser("actual_name"))return $ret;
+				$this->tuple->name = $this->actual_name;
 				if ($ret = $this->rec_parser("("))return $ret;		
 				if ($ret = $this->rec_parser("args"))return $ret;
 				if ($ret = $this->rec_parser(")"))return $ret;
@@ -273,28 +300,43 @@ class CLSParser {
 				if ($this->tokens[$this->index] == "="){
 					if ($ret = $this->rec_parser("="))return $ret;
 					if ($ret = $this->rec_parser("0"))return $ret;
+					$this->method->virtual = "yes";
+					$this->class->kind = "abstract";
 				}
 				break;
 
 			case "args":
 				if ($this->tokens[$this->index] == ")")return 0;
 				if (!($ret = $this->rec_parser("void")))return 0;
+				$this->tuple = new ArgTpl();
+				$this->tuple->scope = "";
+				$this->tuple->privacy = "";
+				$this->method->add_arg($this->tuple);
 				if ($ret = $this->rec_parser("type"))return $ret;
+				$this->tuple->type = $this->actual_type;
 				if ($ret = $this->rec_parser("actual_name"))return $ret;
-				if ($ret = $this->rec_parser("args_n"))return $ret;	
+				$this->tuple->name = $actual_name;
+				if ($ret = $this->rec_parser("args_n"))return $ret;
 				break;
 
 			case "args_n":
 				if ($this->tokens[$this->index] == ","){
 					if ($ret = $this->rec_parser(","))return $ret;
+					$this->tuple = new ArgTpl();
+					$this->tuple->scope = "";
+					$this->tuple->privacy = "";
+					$this->method->add_arg($this->tuple);
 					if ($ret = $this->rec_parser("type"))return $ret;
+					$this->tuple->type = $this->actual_type;
 					if ($ret = $this->rec_parser("actual_name"))return $ret;
+					$this->tuple->name = $actual_name;
 					if ($ret = $this->rec_parser("args_n"))return $ret;	
 				}
 				break;
 
 			case "type":
 				$this->used = 1;
+				$this->actual_type = "";
 				$this->actual_type .= $this->tokens[$this->index];
 				if ($ret = $this->rec_parser("type_next"))return $ret;
 				break;
@@ -333,6 +375,7 @@ class CLSParser {
 			case "privacy":
 				if ($this->tokens[$this->index] == "public" || $this->tokens[$this->index] == "private" || $this->tokens[$this->index] == "protected"){
 					$this->used = 1;
+					$this->actual_privacy = $this->tokens[$this->index];
 					return 0;
 				}
 				else return 1;
@@ -350,7 +393,7 @@ class CLSParser {
 
 			case "inh_name":
 				$this->used = 1;
-				$this->class->add_inheritance($this->tokens[$this->index]);
+				$this->class->add_inheritance(array("privacy" => $this->actual_privacy, "name" => $this->tokens[$this->index]));
 				break;
 
 			default :
@@ -363,11 +406,16 @@ class CLSParser {
 		}
 	}
 
+	function generate(){
+
+	}
+
 	function parse(){
 		$this->tokenize();
 		$this->print_tokens();
 		$ret = 0;
 		if ($ret = $this->rec_parser("finding"))return $ret;
+		if ($ret = $this->generate())return $ret;
 	}
 }
 
@@ -396,7 +444,6 @@ if ($ret = $parser->check_help()){
 if ($ret = $parser->read_input())exit($ret);
 $parser->print_input();
 if ($ret = $parser->parse())exit($ret);
-#parser->class->print_dump();
 var_dump($parser->parsed_classes);
 
 ?>
