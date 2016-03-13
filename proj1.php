@@ -82,6 +82,10 @@ class ArgTpl {
 	}
 }
 
+function trim_value(&$value){ 
+    $value = trim($value); 
+}
+
 class CLSParser {
 	public $parsed_classes;		#array of parsed classes
 	public $class;					#actual class
@@ -134,8 +138,10 @@ class CLSParser {
 	}
 
 	function tokenize(){
-		$this->tokens = preg_split('/([\s:,;{}&\*])/iu', $this->input, -1, PREG_SPLIT_NO_EMPTY | PREG_SPLIT_DELIM_CAPTURE);
-		$this->tokens = array_filter(array_map('trim', $this->tokens));
+		$this->tokens = preg_split('/([\(\)\s:,;{}&\*=])/iu', $this->input, -1, PREG_SPLIT_NO_EMPTY | PREG_SPLIT_DELIM_CAPTURE);
+		$this->tokens = array_map('trim', $this->tokens);
+		foreach ($this->tokens as $key => $value) 
+			if ($value == "")unset($this->tokens[$key]);
 		$this->tokens = array_values($this->tokens);
 	}
 
@@ -165,9 +171,9 @@ class CLSParser {
 			$this->used = 0;
 		}
 
-		if (!array_key_exists($this->index, $this->tokens))return 1;
+		if (!array_key_exists($this->index, $this->tokens))return 0;
 		$ret = 0;
-		echo "$param\n";
+		echo "expected = $param | get = " . $this->tokens[$this->index] . "\n";
 
 		switch ($param){
 			
@@ -184,12 +190,13 @@ class CLSParser {
 				if ($ret = $this->rec_parser("class_name"))return $ret;
 				if ($ret = $this->rec_parser("inh"))return $ret;
 				if ($ret = $this->rec_parser("body"))return $ret;
-				if ($ret = $this->rec_parser("semicolon"))return $ret;
+				if ($ret = $this->rec_parser(";"))return $ret;
 				break;
 
 			case "inh":
 				if ($this->tokens[$this->index] == ":"){
-					if ($ret = $this->rec_parser("colon"))return $ret;
+					if ($ret = $this->rec_parser(":"))return $ret;
+					$this->rec_parser("privacy");
 					if ($ret = $this->rec_parser("inh_name"))return $ret;
 					if ($ret = $this->rec_parser("inh_next"))return $ret;
 				}
@@ -197,7 +204,8 @@ class CLSParser {
 
 			case "inh_next":
 				if ($this->tokens[$this->index] == ","){
-					if ($ret = $this->rec_parser("comma"))return $ret;
+					if ($ret = $this->rec_parser(","))return $ret;
+					$this->rec_parser("privacy");
 					if ($ret = $this->rec_parser("inh_name"))return $ret;
 					if ($ret = $this->rec_parser("inh_next"))return $ret;
 				}
@@ -205,38 +213,47 @@ class CLSParser {
 
 			case "body":
 				if ($this->tokens[$this->index] == "{"){
-					if ($ret = $this->rec_parser("curly_left"))return $ret;
-					$this->rec_parser("privacy");
-					if (($ret = $this->rec_parser("virtual"))){
-						if ($ret = $this->rec_parser("v_method"))return $ret;
-					}
-					else if ($ret = $this->rec_parser("statement"))return $ret;
-					if ($ret = $this->rec_parser("curly_right"))return $ret;
+					if ($ret = $this->rec_parser("{"))return $ret;
+					if ($ret = $this->rec_parser("body_line"))return $ret;
+					if ($ret = $this->rec_parser("}"))return $ret;					
 				}
+				break;
+
+			case "body_line":
+				if ($this->tokens[$this->index] == "}")return 0;
+				if (!($this->rec_parser("privacy")))if ($ret = $this->rec_parser(":"))return $ret;
+				if (!($ret = $this->rec_parser("static"))){
+					if ($ret = $this->rec_parser("statement"))return $ret;
+				}
+				else if (!($ret = $this->rec_parser("virtual"))){
+					if ($ret = $this->rec_parser("v_method"))return $ret;
+				}
+				else
+					if ($ret = $this->rec_parser("statement"))return $ret;
+				if ($ret = $this->rec_parser("body_line"))return $ret;
 				break;
 
 			case "statement":
 				if ($ret = $this->rec_parser("type"))return $ret;
 				if ($ret = $this->rec_parser("actual_name"))return $ret;
 				if ($ret = $this->rec_parser("stmt_tail"))return $ret;
-				if ($ret = $this->rec_parser("semicolon"))return $ret;
+				if ($ret = $this->rec_parser(";"))return $ret;
 				break;
 
 			case "stmt_tail":
 				if ($this->tokens[$this->index] == ",")
 					if ($ret = $this->rec_parser("var_next"))return $ret;
 				else {
-					if ($ret = $this->rec_parser("bracket_left"))return $ret;
+					if ($ret = $this->rec_parser("("))return $ret;
 					if ($ret = $this->rec_parser("args"))return $ret;
 					if ($ret = $this->rec_parser("args_n"))return $ret;
-					if ($ret = $this->rec_parser("bracket_right"))return $ret;
+					if ($ret = $this->rec_parser(")"))return $ret;
 				}
-
 				break;
 
 			case "var_next":
 				if ($this->tokens[$this->index] == ","){
-					if ($ret = $this->rec_parser("comma"))return $ret;
+					if ($ret = $this->rec_parser(","))return $ret;
 					if ($ret = $this->rec_parser("actual_name"))return $ret;
 					if ($ret = $this->rec_parser("var_next"))return $ret;
 				}
@@ -245,14 +262,36 @@ class CLSParser {
 			case "v_method":
 				if ($ret = $this->rec_parser("type"))return $ret;
 				if ($ret = $this->rec_parser("actual_name"))return $ret;
-				if ($ret = $this->rec_parser("bracket_left"))return $ret;		#*
-				if ($ret = $this->rec_parser("args"))return $ret;				#*
-				if ($ret = $this->rec_parser("args_n"))return $ret;				#*
-				if ($ret = $this->rec_parser("bracket_right"))return $ret;		#*
-				if ($ret = $this->rec_parser("v_tail"))return $ret;				#*
+				if ($ret = $this->rec_parser("("))return $ret;		
+				if ($ret = $this->rec_parser("args"))return $ret;
+				if ($ret = $this->rec_parser(")"))return $ret;
+				if ($ret = $this->rec_parser("v_tail"))return $ret;
+				if ($ret = $this->rec_parser(";"))return $ret;
 				break;
 
-			
+			case "v_tail":
+				if ($this->tokens[$this->index] == "="){
+					if ($ret = $this->rec_parser("="))return $ret;
+					if ($ret = $this->rec_parser("0"))return $ret;
+				}
+				break;
+
+			case "args":
+				if ($this->tokens[$this->index] == ")")return 0;
+				if (!($ret = $this->rec_parser("void")))return 0;
+				if ($ret = $this->rec_parser("type"))return $ret;
+				if ($ret = $this->rec_parser("actual_name"))return $ret;
+				if ($ret = $this->rec_parser("args_n"))return $ret;	
+				break;
+
+			case "args_n":
+				if ($this->tokens[$this->index] == ","){
+					if ($ret = $this->rec_parser(","))return $ret;
+					if ($ret = $this->rec_parser("type"))return $ret;
+					if ($ret = $this->rec_parser("actual_name"))return $ret;
+					if ($ret = $this->rec_parser("args_n"))return $ret;	
+				}
+				break;
 
 			case "type":
 				$this->used = 1;
@@ -261,14 +300,15 @@ class CLSParser {
 				break;
 
 			case "type_next":
-				$this->used = 1;
 				if ($this->tokens[$this->index] == "*"){
 					$this->actual_type .= $this->tokens[$this->index];
+					$this->used = 1;
 					if ($ret = $this->rec_parser("*type_next"))return $ret;
 					return 0;
 				}
 				else if ($this->tokens[$this->index] == "&"){
 					$this->actual_type .= $this->tokens[$this->index];
+					$this->used = 1;
 					if ($ret = $this->rec_parser("&type_next"))return $ret;
 					return 0;
 				}
@@ -313,40 +353,12 @@ class CLSParser {
 				$this->class->add_inheritance($this->tokens[$this->index]);
 				break;
 
-			case "curly_left":
-				$this->used = 1;
-				if ($this->tokens[$this->index] == '{')return 0;
+			default :
+				if ($this->tokens[$this->index] == $param){
+					$this->used = 1;
+					return 0;
+				}
 				else return 1;
-				break;
-
-			case "curly_right":
-				$this->used = 1;
-				if ($this->tokens[$this->index] == '}')return 0;
-				else return 1;
-				break;
-
-			case "comma":
-				$this->used = 1;
-				if ($this->tokens[$this->index] == ',')return 0;
-				else return 1;
-				break;
-
-			case "colon":
-				$this->used = 1;
-				if ($this->tokens[$this->index] == ':')return 0;
-				else return 1;
-				break;
-
-			case "semicolon":
-				$this->used = 1;
-				if ($this->tokens[$this->index] == ';')return 0;
-				else return 1;
-				break;
-
-			case "virtual":
-				$this->used = 1;
-				if ($this->tokens[$this->index] == 'virtual')return 1;
-				else return 0;
 				break;
 		}
 	}
@@ -384,7 +396,7 @@ if ($ret = $parser->check_help()){
 if ($ret = $parser->read_input())exit($ret);
 $parser->print_input();
 if ($ret = $parser->parse())exit($ret);
-$parser->class->print_dump();
+#parser->class->print_dump();
 var_dump($parser->parsed_classes);
 
 ?>
