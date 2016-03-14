@@ -5,6 +5,10 @@ public:
     int f(void);
 	int g(int a, float c , double ommm){};
 	string f (int x);
+	int a();
+	int a();
+	int b(int r, string p);
+	int b(int f, string e);
 	int*** p();
 };
 class C {};
