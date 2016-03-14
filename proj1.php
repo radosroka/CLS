@@ -9,6 +9,8 @@ class CPPClass {
 	public $atributes;
 	public $methods;
 
+	public $generated = 0;
+
 	function __construct(){
 		$this->atributes = array();
 		$this->methods = array();
@@ -20,11 +22,57 @@ class CPPClass {
 	}
 
 	function add_attr($attr){
-		array_push($this->atributes, $attr);
+		#array_push($this->atributes, $attr);
+		$this->atributes[$attr->header->name] = $attr;
+	}
+
+	function method_exists($m){
+		if (!array_key_exists($m->header->name, $this->methods))return -1;
+		foreach ($this->methods[$m->header->name] as $key => $method) {
+			if ($m->header->name == $method->header->name){
+				if (count($m->arguments) != count($method->arguments))continue;
+				foreach ($m->arguments as $key => $arg) {
+					if ($arg->type != $method->arguments[$key]->type)break;
+				}
+				return $key;
+			}
+		}
+		return -1;
+	}
+
+	function method_normalize(){
+		foreach ($this->methods as $name => $polymorf) {
+			foreach ($polymorf as $key => $method) {
+				if (count($polymorf) < 2)break;
+				foreach ($polymorf as $key2 => $method2) {
+					if ($key != $key2){
+						
+						if (count($method->arguments) != count($method2->arguments))continue;
+						
+						$not_found = 0;
+						foreach ($method->arguments as $key => $arg)
+							if ($arg->type != $method2->arguments[$key]->type){
+								$not_found = 1;
+								break;
+							}
+						
+						if ($not_found && $key > $key2)
+							unset($polymorf[$key2]);
+						else 
+							if ($not_found && $key < $key2)
+								unset($polymorf[$key]);
+					}
+				}
+			}
+		}
 	}
 
 	function add_method($method){
-		array_push($this->methods, $method);
+		if (!array_key_exists($method->header->name, $this->methods)){
+			$this->methods[$method->header->name] = array();
+		}
+		array_push($this->methods[$method->header->name], $method);
+		#array_push($this->methods, $method);
 	}
 
 	function print_dump(){
@@ -103,7 +151,8 @@ class CLSParser {
 	}
 
 	function add_class($attr){
-		array_push($this->parsed_classes, $attr);
+		#array_push($this->parsed_classes, $attr);
+		$this->parsed_classes[$attr->name] = $attr;
 	}
 
 	function read_input(){
@@ -173,9 +222,9 @@ class CLSParser {
 			
 			case "start":
 				$this->class = new CPPClass();
-				$this->add_class($this->class);
 				$this->actual_privacy = "private";
 				if ($ret = $this->rec_parser("class_name"))return $ret;
+				$this->add_class($this->class);
 				if ($ret = $this->rec_parser("inh"))return $ret;
 				if ($ret = $this->rec_parser("body"))return $ret;
 				if ($ret = $this->rec_parser(";"))return $ret;
@@ -219,20 +268,19 @@ class CLSParser {
 				else if (!($ret = $this->rec_parser("virtual"))){
 					$this->method = new ClassMethod();
 					$this->method->header = $this->tuple;
-					$this->class->add_method($this->method);
 					$this->method->virtual = "no";
 					if ($ret = $this->rec_parser("v_method"))return $ret;
 				}
 				else if (!($ret = $this->rec_parser("using"))){
 					$this->attr = new ClassAttr();
 					$this->attr->header = $this->tuple;
-					$this->class->add_attr($this->attr);
 					if ($ret = $this->rec_parser("actual_name"))return $ret;
 					$this->attr->from_inh = $this->actual_name;
 					if ($ret = $this->rec_parser(":"))return $ret;
 					if ($ret = $this->rec_parser(":"))return $ret;
 					if ($ret = $this->rec_parser("actual_name"))return $ret;
 					$this->tuple->name = $this->actual_name;
+					$this->class->add_attr($this->attr);
 					if ($ret = $this->rec_parser(";"))return $ret;
 				}
 				else {
@@ -269,6 +317,7 @@ class CLSParser {
 					if ($ret = $this->rec_parser("("))return $ret;
 					if ($ret = $this->rec_parser("args"))return $ret;
 					if ($ret = $this->rec_parser(")"))return $ret;
+					if (!($this->rec_parser("{")))if ($ret = $this->rec_parser("}"))return $ret;
 				}
 				break;
 
@@ -289,6 +338,7 @@ class CLSParser {
 				$this->tuple->type = $this->actual_type;
 				if ($ret = $this->rec_parser("actual_name"))return $ret;
 				$this->tuple->name = $this->actual_name;
+				$this->class->add_method($this->method);
 				if ($ret = $this->rec_parser("("))return $ret;		
 				if ($ret = $this->rec_parser("args"))return $ret;
 				if ($ret = $this->rec_parser(")"))return $ret;
@@ -315,7 +365,7 @@ class CLSParser {
 				if ($ret = $this->rec_parser("type"))return $ret;
 				$this->tuple->type = $this->actual_type;
 				if ($ret = $this->rec_parser("actual_name"))return $ret;
-				$this->tuple->name = $actual_name;
+				$this->tuple->name = $this->actual_name;
 				if ($ret = $this->rec_parser("args_n"))return $ret;
 				break;
 
@@ -329,7 +379,7 @@ class CLSParser {
 					if ($ret = $this->rec_parser("type"))return $ret;
 					$this->tuple->type = $this->actual_type;
 					if ($ret = $this->rec_parser("actual_name"))return $ret;
-					$this->tuple->name = $actual_name;
+					$this->tuple->name = $this->actual_name;
 					if ($ret = $this->rec_parser("args_n"))return $ret;	
 				}
 				break;
@@ -343,13 +393,13 @@ class CLSParser {
 
 			case "type_next":
 				if ($this->tokens[$this->index] == "*"){
-					$this->actual_type .= $this->tokens[$this->index];
+					$this->actual_type .= " " . $this->tokens[$this->index];
 					$this->used = 1;
 					if ($ret = $this->rec_parser("*type_next"))return $ret;
 					return 0;
 				}
 				else if ($this->tokens[$this->index] == "&"){
-					$this->actual_type .= $this->tokens[$this->index];
+					$this->actual_type .= " " . $this->tokens[$this->index];
 					$this->used = 1;
 					if ($ret = $this->rec_parser("&type_next"))return $ret;
 					return 0;
@@ -357,20 +407,22 @@ class CLSParser {
 				break;
 
 			case "*type_next":
-				$this->used = 1;
 				if ($this->tokens[$this->index] == "*"){
+					$this->used = 1;
 					$this->actual_type .= $this->tokens[$this->index];
 					if ($ret = $this->rec_parser("*type_next"))return $ret;
 					return 0;
 				}
+				break;
 
 			case "&type_next":
-				$this->used = 1;
 				if ($this->tokens[$this->index] == "&"){
+					$this->used = 1;
 					$this->actual_type .= $this->tokens[$this->index];
 					if ($ret = $this->rec_parser("&type_next"))return $ret;
 					return 0;
 				}
+				break;
 
 			case "privacy":
 				if ($this->tokens[$this->index] == "public" || $this->tokens[$this->index] == "private" || $this->tokens[$this->index] == "protected"){
@@ -406,8 +458,44 @@ class CLSParser {
 		}
 	}
 
-	function generate(){
+	function gen_class($class){
+		if($class->generated)return;
+		
+		$class->method_normalize();
+		
+		foreach ($class->inh as $index => $inh_class){
+			$class_from = $this->parsed_classes[$inh_class["name"]];
+			$this->gen_class($class_from);
 
+			foreach ($class_from->atributes as $key => $value){
+				if (!array_key_exists($key, $class->atributes)){
+					$class->atributes[$key] = clone $value;
+					$class->atributes[$key]->header = clone $value->header;
+					if ($inh_class["privacy"] != "")$class->atributes[$key]->header->privacy = $inh_class["privacy"];
+				}
+			}
+
+			foreach ($class_from->methods as $key => $polymorf){
+				foreach ($polymorf as $index => $method){
+					$ret = 0;
+					if (($ret = $class->method_exists($method)) == -1){
+						$tmp = clone $method;
+						$tmp->header = clone $method->header;
+						$class->add_method($tmp);
+						if ($inh_class["privacy"] != "")$tmp->header->privacy = $inh_class["privacy"];
+					}
+
+
+				}
+			}
+		}
+		$class->generated = 1;
+	}
+
+	function generate(){
+		foreach ($this->parsed_classes as $name => $class){
+			$this->gen_class($class);
+		}
 	}
 
 	function parse(){

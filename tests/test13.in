@@ -1,0 +1,11 @@
+class A {virtual int f(void) =0;};
+class B : A {
+public:
+    int var;
+    int f(void);
+	int g(int a, float c , double ommm){};
+	string f (int x);
+	int*** p();
+};
+class C {};
+class D : protected B, C {};

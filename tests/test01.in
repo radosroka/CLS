@@ -1,4 +1,4 @@
-class A{};
-class B:A{};
+class Z{};
+class B:Z{};
 class C{};
 class D:B,C{};
