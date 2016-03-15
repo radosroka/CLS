@@ -519,9 +519,18 @@ class CLSParser {
 
 	function gen_class_tree_xml(){
 		$this->writer->startDocument( '1.0' , 'UTF-8');
+		$this->writer->startElement("model");
+		foreach ($this->parsed_classes as $name => $class){
+			if (count($class->inh) == 0)
+				$this->rec_gen_tree($class);
+		}
 
-
+		$this->writer->endElement();
 		$this->writer->endDocument();
+	}
+
+	function rec_gen_tree($class){
+
 	}
 
 	function export_xml(){
