@@ -49,18 +49,17 @@ class CPPClass {
 						
 						if (count($method->arguments) != count($method2->arguments))continue;
 						
-						$not_found = 0;
+						$not_found = 1;
 						foreach ($method->arguments as $key => $arg)
 							if ($arg->type != $method2->arguments[$key]->type){
-								$not_found = 1;
+								$not_found = 0;
 								break;
 							}
 						
 						if ($not_found && $key > $key2)
 							unset($polymorf[$key2]);
-						else 
-							if ($not_found && $key < $key2)
-								unset($polymorf[$key]);
+						else if ($not_found && $key < $key2)
+							unset($polymorf[$key]);
 					}
 				}
 			}
@@ -132,6 +131,8 @@ class CLSParser {
 
 	public $sets;
 	public $options;
+
+	public $writer;
 	
 	function __construct(){
 		$this->parsed_classes = array();
@@ -147,6 +148,16 @@ class CLSParser {
 		$this->actual_type = "";
 		$this->actual_privacy = "private";
 
+		$this->writer = new XMLWriter();
+		$this->writer->openMemory();
+		$this->writer->setIndent(true);
+
+		if (array_key_exists("pretty-xml", $this->options)){
+			$indent = "";
+			for ($i ; $i < $this->options["pretty-xml"] ; $i++)$indent .= " ";
+			$this->writer->setIndentString($indent);
+		}
+		else $this->writer->setIndentString("    ");
 		var_dump($this->options);
 	}
 
@@ -461,7 +472,7 @@ class CLSParser {
 	function gen_class($class){
 		if($class->generated)return;
 		
-		$class->method_normalize();
+		#$class->method_normalize();
 		
 		foreach ($class->inh as $index => $inh_class){
 			$class_from = $this->parsed_classes[$inh_class["name"]];
@@ -505,19 +516,24 @@ class CLSParser {
 		if ($ret = $this->rec_parser("finding"))return $ret;
 		if ($ret = $this->generate())return $ret;
 	}
+
+	function gen_class_tree_xml(){
+		$this->writer->startDocument( '1.0' , 'UTF-8');
+
+
+		$this->writer->endDocument();
+	}
+
+	function export_xml(){
+		if (array_key_exists("output", $this->options)){
+			if (!($myfile = fopen($this->options["output"], "w")))
+				return 2;
+			fwrite($myfile, $this->writer->outputMemory());
+			fclose($myfile);
+		}
+		else echo $this->writer->outputMemory();
+	}
 }
-
-
-#$abcd = new class_methods(new arg_tpl("abc", "int"), "instance", false, "");
-
-#echo $abcd->header->name;
-#$regexp = "class\s+[^\W\d][\w]*[\s]*([:][\s]*[^\W\d][\w]*([\s]*[,][\s]*[^\W\d][\w]*)*)?[\s]*({(\s*|.*)});";
-#echo $input;
-#$parsed = preg_split('/([\s:,;{}])/iu', $input, -1, PREG_SPLIT_NO_EMPTY | PREG_SPLIT_DELIM_CAPTURE);
-
-#$parsed = array_filter(array_map('trim', $parsed));
-
-#var_dump($parsed);
 
 $parser = new CLSParser();
 $ret = 0;
@@ -533,5 +549,8 @@ if ($ret = $parser->read_input())exit($ret);
 $parser->print_input();
 if ($ret = $parser->parse())exit($ret);
 var_dump($parser->parsed_classes);
+
+$parser->gen_class_tree_xml();
+$parser->export_xml();
 
 ?>
