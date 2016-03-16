@@ -6,13 +6,13 @@ class CPPClass {
 	public $kind = "concrete";	# concrete/abstract
 
 	public $inh;
-	public $atributes;
+	public $attributes;
 	public $methods;
 
 	public $generated = 0;
 
 	function __construct(){
-		$this->atributes = array();
+		$this->attributes = array();
 		$this->methods = array();
 		$this->inh = array();
 	}
@@ -22,8 +22,8 @@ class CPPClass {
 	}
 
 	function add_attr($attr){
-		#array_push($this->atributes, $attr);
-		$this->atributes[$attr->header->name] = $attr;
+		#array_push($this->attributes, $attr);
+		$this->attributes[$attr->header->name] = $attr;
 	}
 
 	function method_exists($m){
@@ -107,6 +107,7 @@ class ArgTpl {
 	public $type = "";
 	public $scope = "instance";		# static/instance
 	public $privacy = "private";	# private/public/pretected
+	public $from = "";
 }
 
 function trim_value(&$value){ 
@@ -139,7 +140,7 @@ class CLSParser {
 		mb_internal_encoding("UTF-8"); 
 		mb_regex_encoding('UTF-8');
 
-		$this->sets = array( "help", "input:", "output:", "pretty-xml:", "details:", "search::" );
+		$this->sets = array( "help", "input:", "output:", "pretty-xml:", "details::", "search::" );
 		$this->options = getopt("", $this->sets);
 
 		$this->index = 0;
@@ -244,7 +245,7 @@ class CLSParser {
 			case "inh":
 				if ($this->tokens[$this->index] == ":"){
 					if ($ret = $this->rec_parser(":"))return $ret;
-					if (($this->rec_parser("privacy")))$this->actual_privacy = "";
+					if (($this->rec_parser("privacy")))$this->actual_privacy = "private";
 					if ($ret = $this->rec_parser("inh_name"))return $ret;
 					if ($ret = $this->rec_parser("inh_next"))return $ret;
 				}
@@ -253,7 +254,7 @@ class CLSParser {
 			case "inh_next":
 				if ($this->tokens[$this->index] == ","){
 					if ($ret = $this->rec_parser(","))return $ret;
-					if (($this->rec_parser("privacy")))$this->actual_privacy = "";
+					if (($this->rec_parser("privacy")))$this->actual_privacy = "private";
 					if ($ret = $this->rec_parser("inh_name"))return $ret;
 					if ($ret = $this->rec_parser("inh_next"))return $ret;
 				}
@@ -478,11 +479,22 @@ class CLSParser {
 			$class_from = $this->parsed_classes[$inh_class["name"]];
 			$this->gen_class($class_from);
 
-			foreach ($class_from->atributes as $key => $value){
-				if (!array_key_exists($key, $class->atributes)){
-					$class->atributes[$key] = clone $value;
-					$class->atributes[$key]->header = clone $value->header;
-					if ($inh_class["privacy"] != "")$class->atributes[$key]->header->privacy = $inh_class["privacy"];
+			foreach ($class_from->attributes as $key => $value){
+				if (!array_key_exists($key, $class->attributes)){
+					$class->attributes[$key] = clone $value;
+					$class->attributes[$key]->header = clone $value->header;
+					if ($inh_class["privacy"] != "")$class->attributes[$key]->header->privacy = $inh_class["privacy"];
+
+
+					//******* using **********//
+					//dedenie od pradeda doriesit
+					//construktory
+					//virtual dedenie
+					//--search
+					//chyba 21
+
+
+					$class->attributes[$key]->header->from = $class_from->name;
 				}
 			}
 
@@ -493,7 +505,7 @@ class CLSParser {
 						$tmp = clone $method;
 						$tmp->header = clone $method->header;
 						$class->add_method($tmp);
-						if ($inh_class["privacy"] != "")$tmp->header->privacy = $inh_class["privacy"];
+						$tmp->header->from = $class_from->name;
 					}
 
 
@@ -530,7 +542,209 @@ class CLSParser {
 	}
 
 	function rec_gen_tree($class){
+		$this->writer->startElement("class");
 
+		$this->writer->startAttribute("name");
+			$this->writer->text($class->name);
+		$this->writer->endAttribute();
+
+		$this->writer->startAttribute("kind");
+			$this->writer->text($class->kind);
+		$this->writer->endAttribute();
+
+		foreach ($this->parsed_classes as $name => $cls) {
+			if ($name != $class->name){
+				foreach ($cls->inh as $index => $inh) {
+					if ($class->name == $inh["name"]){
+						$this->rec_gen_tree($this->parsed_classes[$name]);
+						break;
+					}
+				}
+			}
+		}
+
+		$this->writer->endElement();
+	}
+
+	function gen_class_details($class){
+		$this->writer->startElement("class");
+
+		$this->writer->startAttribute("name");
+			$this->writer->text($class->name);
+		$this->writer->endAttribute();
+
+		$this->writer->startAttribute("kind");
+			$this->writer->text($class->kind);
+		$this->writer->endAttribute();
+
+		if (count($class->inh) != 0){
+			$this->writer->startElement("ineheritance");
+			foreach ($class->inh as $index => $from) {
+				$this->writer->startElement("from");
+
+				$this->writer->startAttribute("name");
+					$this->writer->text($from["name"]);
+				$this->writer->endAttribute();
+
+				$this->writer->startAttribute("privacy");
+					if ($from["privacy"] == "")$this->writer->text("private");
+					else $this->writer->text($from["privacy"]);
+				$this->writer->endAttribute();
+
+				$this->writer->endElement();
+			}
+			$this->writer->endElement();
+		}
+
+		foreach (["public", "protected", "private"] as $privacy) {
+
+			$exist_attr = 0;
+			$exist_method = 0;
+			foreach ($class->attributes as $name => $attr){
+				if ($attr->header->privacy == "")$attr->header->privacy = "private";
+				if ($attr->header->privacy == $privacy)$exist_attr = 1;
+			}
+
+			foreach ($class->methods as $name => $polymorf){
+				foreach ($polymorf as $index => $method) {
+					if ($method->header->privacy == "")$method->header->privacy = "private";
+					if ($method->header->privacy == $privacy)$exist_method = 1;
+				}
+			}
+
+			if ($exist_attr || $exist_method){
+
+				$this->writer->startElement($privacy);
+
+				if ($exist_attr){
+					$this->writer->startElement("attributes");
+					foreach ($class->attributes as $name => $attr) {
+						if ($attr->header->privacy == $privacy){
+
+							$this->writer->startElement("attribute");
+
+							$this->writer->startAttribute("name");
+								$this->writer->text($attr->header->name);
+							$this->writer->endAttribute();
+
+							$this->writer->startAttribute("type");
+								$this->writer->text($attr->header->type);
+							$this->writer->endAttribute();
+
+							$this->writer->startAttribute("scope");
+								$this->writer->text($attr->header->scope);
+							$this->writer->endAttribute();
+
+							if ($attr->header->from != ""){
+								$this->writer->startElement("from");
+
+								$this->writer->startAttribute("name");
+									$this->writer->text($attr->header->from);
+								$this->writer->endAttribute();
+
+								$this->writer->endElement();
+							}
+
+							$this->writer->endElement();
+						}
+					}
+					$this->writer->endElement();
+				}
+
+				if ($exist_method){
+					$this->writer->startElement("methods");
+					foreach ($class->methods as $name => $polymorf) {
+						foreach ($polymorf as $index => $method) {
+							if ($method->header->privacy == $privacy){
+
+								$this->writer->startElement("method");
+
+								$this->writer->startAttribute("name");
+									$this->writer->text($method->header->name);
+								$this->writer->endAttribute();
+
+								$this->writer->startAttribute("type");
+									$this->writer->text($method->header->type);
+								$this->writer->endAttribute();
+
+								$this->writer->startAttribute("scope");
+									$this->writer->text($method->header->scope);
+								$this->writer->endAttribute();
+
+								if ($method->header->from != ""){
+									$this->writer->startElement("from");
+
+									$this->writer->startAttribute("name");
+										$this->writer->text($method->header->from);
+									$this->writer->endAttribute();
+
+									$this->writer->endElement();
+								}
+
+								if ($method->virtual != ""){
+									$this->writer->startElement("virtual");
+
+									$this->writer->startAttribute("pure");
+										$this->writer->text($method->virtual);
+									$this->writer->endAttribute();
+
+									$this->writer->endElement();
+								}
+
+								$this->writer->startElement("virtual");
+								foreach ($method->arguments as $index => $arg) {
+									$this->writer->startElement("argument");
+
+									$this->writer->startAttribute("name");
+										$this->writer->text($arg->name);
+									$this->writer->endAttribute();
+
+									$this->writer->startAttribute("type");
+										$this->writer->text($arg->type);
+									$this->writer->endAttribute();
+
+									$this->writer->endElement();
+								}
+								$this->writer->endElement();
+
+								$this->writer->endElement();
+							}
+						}
+					}
+					$this->writer->endElement();
+				}
+				$this->writer->endElement();
+			}
+		}
+
+
+		$this->writer->endElement();
+	}
+
+	function gen_details($what){
+		$this->writer->startDocument( '1.0' , 'UTF-8');
+		$this->writer->startElement("model");
+
+		if ($what != "" && array_key_exists($what, $this->parsed_classes)){
+			$cls = $this->parsed_classes[$what];
+			$this->gen_class_details($cls);
+		}
+		else if ($what == ""){
+			foreach ($this->parsed_classes as $name => $class) {
+				$this->gen_class_details($class);
+			}
+		}
+
+		$this->writer->endElement();
+		$this->writer->endDocument();
+	}
+
+	function gen_xml(){
+		if (array_key_exists("details", $this->options)){
+			if ($this->options["details"])$this->gen_details($this->options["details"]);
+			else $this->gen_details("");
+		}
+		else $this->gen_class_tree_xml();
 	}
 
 	function export_xml(){
@@ -558,8 +772,7 @@ if ($ret = $parser->read_input())exit($ret);
 $parser->print_input();
 if ($ret = $parser->parse())exit($ret);
 var_dump($parser->parsed_classes);
-
-$parser->gen_class_tree_xml();
+$parser->gen_xml();
 $parser->export_xml();
 
 ?>
