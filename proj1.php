@@ -471,30 +471,57 @@ class CLSParser {
 	}
 
 	function gen_class($class){
-		if($class->generated)return;
+		if($class->generated)return 0;
 		
 		#$class->method_normalize();
+
+		$checked = 1;
 		
 		foreach ($class->inh as $index => $inh_class){
 			$class_from = $this->parsed_classes[$inh_class["name"]];
-			$this->gen_class($class_from);
+			if ($this->gen_class($class_from))return 21;
+
+			if ($checked){
+				foreach ($class->attributes as $name => $attr) {
+					if ($attr->from_inh != ""){
+						$cls = $this->parsed_classes[$attr->from_inh];
+						$class->attributes[$name] = clone $cls->attributes[$name];
+						$class->attributes[$name]->header = clone $cls->attributes[$name]->header;
+						if ($class->attributes[$name]->header->from == "")
+							$class->attributes[$name]->header->from = $attr->from_inh;
+						foreach ($class->inh as $num => $from){
+							if ($from["name"] == $attr->from_inh){
+								$class->attributes[$name]->header->privacy = $from["privacy"];
+								break;
+							}
+						}
+					}
+				}
+
+				$array = array();
+				foreach ($class->inh as $key => $cls) {
+					foreach ($this->parsed_classes[$cls["name"]]->attributes as $name => $attr) {
+						if (!array_key_exists($name, $array))
+							$array[$name] = $attr;
+						else return 21;
+					}
+				}
+
+				var_dump($array);
+				$checked = 0;
+			}
 
 			foreach ($class_from->attributes as $key => $value){
 				if (!array_key_exists($key, $class->attributes)){
 					$class->attributes[$key] = clone $value;
 					$class->attributes[$key]->header = clone $value->header;
 					if ($inh_class["privacy"] != "")$class->attributes[$key]->header->privacy = $inh_class["privacy"];
+					if ($value->header->from == "")
+						$class->attributes[$key]->header->from = $class_from->name;
 
-
-					//******* using **********//
-					//dedenie od pradeda doriesit
 					//construktory
-					//virtual dedenie
 					//--search
-					//chyba 21
-
-
-					$class->attributes[$key]->header->from = $class_from->name;
+					//typy
 				}
 			}
 
@@ -505,7 +532,10 @@ class CLSParser {
 						$tmp = clone $method;
 						$tmp->header = clone $method->header;
 						$class->add_method($tmp);
-						$tmp->header->from = $class_from->name;
+						if ($method->header->from == "")
+							$tmp->header->from = $class_from->name;
+						if ($method->virtual == "yes")
+							$class->kind = "abstract";
 					}
 
 
@@ -517,7 +547,7 @@ class CLSParser {
 
 	function generate(){
 		foreach ($this->parsed_classes as $name => $class){
-			$this->gen_class($class);
+			if ($this->gen_class($class))return 21;
 		}
 	}
 
@@ -530,7 +560,6 @@ class CLSParser {
 	}
 
 	function gen_class_tree_xml(){
-		$this->writer->startDocument( '1.0' , 'UTF-8');
 		$this->writer->startElement("model");
 		foreach ($this->parsed_classes as $name => $class){
 			if (count($class->inh) == 0)
@@ -722,7 +751,6 @@ class CLSParser {
 	}
 
 	function gen_details($what){
-		$this->writer->startDocument( '1.0' , 'UTF-8');
 		$this->writer->startElement("model");
 
 		if ($what != "" && array_key_exists($what, $this->parsed_classes)){
@@ -740,6 +768,8 @@ class CLSParser {
 	}
 
 	function gen_xml(){
+		$this->writer->startDocument( '1.0' , 'UTF-8');
+		if (count($this->parsed_classes) == 0)return;
 		if (array_key_exists("details", $this->options)){
 			if ($this->options["details"])$this->gen_details($this->options["details"]);
 			else $this->gen_details("");
