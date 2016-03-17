@@ -1,0 +1,20 @@
+class A {
+	virtual int f(void) =0;
+public:
+	A () {};
+	~A ();
+private:
+	A (int i, string g);
+};
+class B : A {
+public:
+	B();
+	~B();
+    int var;
+    virtual int f(void);
+
+};
+class C : A {};
+class D : public B, C {
+public:
+};

@@ -134,6 +134,7 @@ class CLSParser {
 	public $options;
 
 	public $writer;
+	public $indent;
 	
 	function __construct(){
 		$this->parsed_classes = array();
@@ -152,13 +153,14 @@ class CLSParser {
 		$this->writer = new XMLWriter();
 		$this->writer->openMemory();
 		$this->writer->setIndent(true);
+		$this->indent = "    ";
 
 		if (array_key_exists("pretty-xml", $this->options)){
-			$indent = "";
-			for ($i ; $i < $this->options["pretty-xml"] ; $i++)$indent .= " ";
-			$this->writer->setIndentString($indent);
+			$this->indent = "";
+			for ($i = 0 ; $i < $this->options["pretty-xml"] ; $i++)$this->indent .= " ";
+			$this->writer->setIndentString($this->indent);
 		}
-		else $this->writer->setIndentString("    ");
+		else $this->writer->setIndentString($this->indent);
 		var_dump($this->options);
 	}
 
@@ -302,8 +304,14 @@ class CLSParser {
 				break;
 
 			case "statement":
-				if ($ret = $this->rec_parser("type"))return $ret;
-				$this->tuple->type = $this->actual_type;
+				if ($this->tokens[$this->index] == $this->class->name)
+					$this->tuple->type = $this->class->name;
+				else if ($this->tokens[$this->index] == ("~" . $this->class->name))
+					$this->tuple->type = "void";
+				else {
+					if ($ret = $this->rec_parser("type"))return $ret;
+					$this->tuple->type = $this->actual_type;
+				}
 				if ($ret = $this->rec_parser("actual_name"))return $ret;
 				$this->tuple->name = $this->actual_name;
 				if ($ret = $this->rec_parser("stmt_tail"))return $ret;
@@ -518,27 +526,24 @@ class CLSParser {
 					if ($inh_class["privacy"] != "")$class->attributes[$key]->header->privacy = $inh_class["privacy"];
 					if ($value->header->from == "")
 						$class->attributes[$key]->header->from = $class_from->name;
-
-					//construktory
-					//--search
-					//typy
 				}
 			}
 
 			foreach ($class_from->methods as $key => $polymorf){
-				foreach ($polymorf as $index => $method){
-					$ret = 0;
-					if (($ret = $class->method_exists($method)) == -1){
-						$tmp = clone $method;
-						$tmp->header = clone $method->header;
-						$class->add_method($tmp);
-						if ($method->header->from == "")
-							$tmp->header->from = $class_from->name;
-						if ($method->virtual == "yes")
-							$class->kind = "abstract";
+				echo $class_from->name . ", " . $key . "\n";
+				if ($class_from->name == $key && $class_from->name == ("~" . $key)){
+					foreach ($polymorf as $index => $method){
+						$ret = 0;
+						if (($ret = $class->method_exists($method)) == -1){
+							$tmp = clone $method;
+							$tmp->header = clone $method->header;
+							$class->add_method($tmp);
+							if ($method->header->from == "")
+								$tmp->header->from = $class_from->name;
+							if ($method->virtual == "yes")
+								$class->kind = "abstract";
+						}
 					}
-
-
 				}
 			}
 		}
@@ -778,13 +783,34 @@ class CLSParser {
 	}
 
 	function export_xml(){
+		$output = $this->writer->outputMemory();
+
+		if (array_key_exists("search", $this->options)){
+			$xml = new SimpleXMLElement($output);
+			if (!($result = $xml->xpath($this->options["search"])))return 1;
+
+			$this->writer->flush();
+			$this->writer->startDocument( '1.0' , 'UTF-8');
+
+			
+			$concat = "<result>\n";
+			while(list( , $node) = each($result)) {
+    			$concat .= $this->indent . $node . "\n";
+			}
+			$concat .= "</result>\n";
+			$this->writer->writeRaw($concat);
+
+			$this->writer->endDocument();
+
+			$output = $this->writer->outputMemory();
+		}
 		if (array_key_exists("output", $this->options)){
 			if (!($myfile = fopen($this->options["output"], "w")))
 				return 2;
-			fwrite($myfile, $this->writer->outputMemory());
+			fwrite($myfile, $output);
 			fclose($myfile);
 		}
-		else echo $this->writer->outputMemory();
+		else echo $output;
 	}
 }
 
@@ -803,6 +829,5 @@ $parser->print_input();
 if ($ret = $parser->parse())exit($ret);
 var_dump($parser->parsed_classes);
 $parser->gen_xml();
-$parser->export_xml();
-
+if ($ret = $parser->export_xml())exit($ret);
 ?>
