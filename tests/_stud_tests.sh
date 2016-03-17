@@ -75,11 +75,11 @@ $INTERPRETER $TASK.$EXTENSION --input=${LOCAL_IN_PATH}test01.in --output=${LOCAL
 echo -n $? > test01.!!!
 
 # test02: vypis bazove tridy; Expected output: test02.out; Expected return code: 0
-$INTERPRETER $TASK.$EXTENSION --input=${LOCAL_IN_PATH}test02.in -d > ${LOCAL_OUT_PATH}test02.out --details=A 2> ${LOG_PATH}test02.err
+$INTERPRETER $TASK.$EXTENSION --input=${LOCAL_IN_PATH}test02.in > ${LOCAL_OUT_PATH}test02.out --details=A 2> ${LOG_PATH}test02.err
 echo -n $? > test02.!!!
 
 # test03: vypis dedici tridy; Expected output: test03.out; Expected return code: 0
-$INTERPRETER $TASK.$EXTENSION -d --input=${LOCAL_IN_PATH}test03.in --output=${LOCAL_OUT_PATH}test03.out --details=D 2> ${LOG_PATH}test03.err
+$INTERPRETER $TASK.$EXTENSION --input=${LOCAL_IN_PATH}test03.in --output=${LOCAL_OUT_PATH}test03.out --details=D 2> ${LOG_PATH}test03.err
 echo -n $? > test03.!!!
 
 # test04: dedeni ciste virtualni metody => vsechny tridy abstraktni; Expected output: test04.out; Expected return code: 0
@@ -117,3 +117,7 @@ echo -n $? > test11.!!!
 # test12: BONUS: vypis konfliktniho clenu ve tride; Expected output: test12.out; Expected return code: 0
 $INTERPRETER $TASK.$EXTENSION --input=${LOCAL_IN_PATH3}test12.in --output=${LOCAL_OUT_PATH}test12.out --details=C --conflicts 2> ${LOG_PATH}test12.err
 echo -n $? > test12.!!!
+
+# test13: Nevypsani zdedeneho clenu, ktery byl v dedene tride private a ktery neni pure virtual metodou; Expected output:  test13.out; Exptected return code: 0
+$INTERPRETER $TASK.$EXTENSION --input=${LOCAL_IN_PATH3}test13.in --output=${LOCAL_OUT_PATH}test13.out --details=B 2> ${LOG_PATH}test13.err
+echo -n $? > test13.!!!
