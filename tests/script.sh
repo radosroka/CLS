@@ -3,7 +3,7 @@
 #set -x
 
 
-cp ../proj1.php ./cls.php
+cp ../cls.php ./cls.php
 cp ~/jexamxml.jar ./
 ./_stud_tests.sh
 

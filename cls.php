@@ -1,5 +1,9 @@
 #!/usr/bin/php
 <?php
+#CLS:xsroka00
+#project	CLS - IPP
+#author 	Radovan Sroka
+#login 		xsroka00
 
 class CPPClass {
 	public $name = "";
@@ -490,8 +494,11 @@ class CLSParser {
 			if ($this->gen_class($class_from))return 21;
 
 			if ($checked){
+
+				$attr_using = array();
 				foreach ($class->attributes as $name => $attr) {
 					if ($attr->from_inh != ""){
+						$attr_using[$name] = $attr;
 						$cls = $this->parsed_classes[$attr->from_inh];
 						$class->attributes[$name] = clone $cls->attributes[$name];
 						$class->attributes[$name]->header = clone $cls->attributes[$name]->header;
@@ -499,19 +506,46 @@ class CLSParser {
 							$class->attributes[$name]->header->from = $attr->from_inh;
 						foreach ($class->inh as $num => $from){
 							if ($from["name"] == $attr->from_inh){
-								$class->attributes[$name]->header->privacy = $from["privacy"];
+								$class->attributes[$name]->header->privacy = "private";
 								break;
 							}
 						}
 					}
 				}
 
-				$array = array();
+				$attributes = array();
+				$methods = array();
 				foreach ($class->inh as $key => $cls) {
 					foreach ($this->parsed_classes[$cls["name"]]->attributes as $name => $attr) {
-						if (!array_key_exists($name, $array))
-							$array[$name] = $attr;
+						if (array_key_exists($name, $attr_using))continue;
+						if (!array_key_exists($name, $attributes))
+							$attributes[$name] = $attr;
 						else return 21;
+					}
+
+					foreach ($this->parsed_classes[$cls["name"]]->methods as $name => $polymorf) {
+					
+						foreach ($polymorf as $key1 => $method) {
+							if (!array_key_exists($name, $methods))
+								$methods[$method->header->name] = array();
+							else {
+								foreach ($methods[$name] as $i => $m) {
+									if (count($method->arguments) != count($m->arguments))continue;
+									$found = 1;
+									foreach ($m->arguments as $key2 => $arg) {
+										if ($arg->type != $method->arguments[$key2]->type){
+											$found = 0;
+											break;
+										}
+									}
+									if ($found){
+										return 21;
+									}
+								}
+							}
+							array_push($methods[$name], $method);
+						}
+
 					}
 				}
 				$checked = 0;
@@ -533,7 +567,7 @@ class CLSParser {
 			}
 
 			foreach ($class_from->methods as $key => $polymorf){
-				if ($class_from->name == $key && $class_from->name == ("~" . $key)){
+				if ($class_from->name != $key && ("~".$class_from->name) != $key){
 					foreach ($polymorf as $index => $method){
 						$ret = 0;
 						if (($ret = $class->method_exists($method)) == -1){
@@ -620,7 +654,7 @@ class CLSParser {
 		$this->writer->endAttribute();
 
 		if (count($class->inh) != 0){
-			$this->writer->startElement("ineheritance");
+			$this->writer->startElement("inheritance");
 			foreach ($class->inh as $index => $from) {
 				$this->writer->startElement("from");
 
@@ -637,8 +671,8 @@ class CLSParser {
 			}
 			$this->writer->endElement();
 		}
-
-		foreach (["public", "protected", "private"] as $privacy) {
+		$fsd = array("public", "protected", "private");
+		foreach ($fsd as $privacy) {
 
 			$exist_attr = 0;
 			$exist_method = 0;
@@ -702,7 +736,7 @@ class CLSParser {
 							if ($method->header->privacy == $privacy){
 
 								if ($privacy == "private")
-									if ($method->header->hidden == "yes")continue;
+									if ($method->header->hidden == "yes" && $method->virtual == "")continue;
 
 								$this->writer->startElement("method");
 
@@ -738,7 +772,7 @@ class CLSParser {
 									$this->writer->endElement();
 								}
 
-								$this->writer->startElement("virtual");
+								$this->writer->startElement("arguments");
 								foreach ($method->arguments as $index => $arg) {
 									$this->writer->startElement("argument");
 
@@ -769,19 +803,18 @@ class CLSParser {
 	}
 
 	function gen_details($what){
-		$this->writer->startElement("model");
 
 		if ($what != "" && array_key_exists($what, $this->parsed_classes)){
 			$cls = $this->parsed_classes[$what];
 			$this->gen_class_details($cls);
 		}
 		else if ($what == ""){
+			$this->writer->startElement("model");
 			foreach ($this->parsed_classes as $name => $class) {
 				$this->gen_class_details($class);
 			}
+			$this->writer->endElement();
 		}
-
-		$this->writer->endElement();
 		$this->writer->endDocument();
 	}
 

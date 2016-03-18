@@ -1,5 +1,4 @@
 class A {
-	virtual int f(void) =0;
 public:
 	A () {};
 	~A ();
