@@ -2,10 +2,10 @@
 <model>
     <class name="A" kind="abstract">
         <class name="B" kind="concrete">
-            <class name="D" kind="concrete" >
+            <class name="D" kind="concrete" />
         </class>
     </class>
     <class name="C" kind="concrete">
-        <class name="D" kind="concrete">
+        <class name="D" kind="concrete" />
     </class>
 </model>

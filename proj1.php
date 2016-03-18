@@ -107,6 +107,7 @@ class ArgTpl {
 	public $type = "";
 	public $scope = "instance";		# static/instance
 	public $privacy = "private";	# private/public/pretected
+	public $hidden = "no";
 	public $from = "";
 }
 
@@ -161,7 +162,6 @@ class CLSParser {
 			$this->writer->setIndentString($this->indent);
 		}
 		else $this->writer->setIndentString($this->indent);
-		var_dump($this->options);
 	}
 
 	function add_class($attr){
@@ -223,7 +223,6 @@ class CLSParser {
 
 		if (!array_key_exists($this->index, $this->tokens))return 0;
 		$ret = 0;
-		echo "expected = $param | get = " . $this->tokens[$this->index] . "\n";
 
 		switch ($param){
 			
@@ -265,6 +264,7 @@ class CLSParser {
 			case "body":
 				if ($this->tokens[$this->index] == "{"){
 					if ($ret = $this->rec_parser("{"))return $ret;
+					$this->actual_privacy = "private";
 					if ($ret = $this->rec_parser("body_line"))return $ret;
 					if ($ret = $this->rec_parser("}"))return $ret;					
 				}
@@ -514,8 +514,6 @@ class CLSParser {
 						else return 21;
 					}
 				}
-
-				var_dump($array);
 				$checked = 0;
 			}
 
@@ -523,14 +521,18 @@ class CLSParser {
 				if (!array_key_exists($key, $class->attributes)){
 					$class->attributes[$key] = clone $value;
 					$class->attributes[$key]->header = clone $value->header;
-					if ($inh_class["privacy"] != "")$class->attributes[$key]->header->privacy = $inh_class["privacy"];
+					if ($class->attributes[$key]->header->privacy == "private")$class->attributes[$key]->header->hidden = "yes";
+
+					if ($inh_class["privacy"] == "private")$class->attributes[$key]->header->privacy = "private";
+					else if ($inh_class["privacy"] == "protected")
+						if ($class->attributes[$key]->header->privacy != "private")$class->attributes[$key]->header->privacy = "protected";
+
 					if ($value->header->from == "")
 						$class->attributes[$key]->header->from = $class_from->name;
 				}
 			}
 
 			foreach ($class_from->methods as $key => $polymorf){
-				echo $class_from->name . ", " . $key . "\n";
 				if ($class_from->name == $key && $class_from->name == ("~" . $key)){
 					foreach ($polymorf as $index => $method){
 						$ret = 0;
@@ -538,6 +540,13 @@ class CLSParser {
 							$tmp = clone $method;
 							$tmp->header = clone $method->header;
 							$class->add_method($tmp);
+
+							if ($tmp->virtual == "" && $tmp->header->privacy == "private")$tmp->header->hidden = "yes";
+
+							if ($inh_class["privacy"] == "private")$tmp->header->privacy = "private";
+							else if ($inh_class["privacy"] == "protected")
+								if ($tmp->header->privacy != "private")$tmp->header->privacy = "protected";
+
 							if ($method->header->from == "")
 								$tmp->header->from = $class_from->name;
 							if ($method->virtual == "yes")
@@ -558,7 +567,6 @@ class CLSParser {
 
 	function parse(){
 		$this->tokenize();
-		$this->print_tokens();
 		$ret = 0;
 		if ($ret = $this->rec_parser("finding"))return $ret;
 		if ($ret = $this->generate())return $ret;
@@ -654,7 +662,9 @@ class CLSParser {
 					$this->writer->startElement("attributes");
 					foreach ($class->attributes as $name => $attr) {
 						if ($attr->header->privacy == $privacy){
-
+							if ($privacy == "private")
+								if ($attr->header->hidden == "yes")continue;
+							
 							$this->writer->startElement("attribute");
 
 							$this->writer->startAttribute("name");
@@ -690,6 +700,9 @@ class CLSParser {
 					foreach ($class->methods as $name => $polymorf) {
 						foreach ($polymorf as $index => $method) {
 							if ($method->header->privacy == $privacy){
+
+								if ($privacy == "private")
+									if ($method->header->hidden == "yes")continue;
 
 								$this->writer->startElement("method");
 
@@ -825,9 +838,9 @@ if ($ret = $parser->check_help()){
 }
 
 if ($ret = $parser->read_input())exit($ret);
-$parser->print_input();
+#$parser->print_input();
 if ($ret = $parser->parse())exit($ret);
-var_dump($parser->parsed_classes);
+#var_dump($parser->parsed_classes);
 $parser->gen_xml();
 if ($ret = $parser->export_xml())exit($ret);
 ?>
